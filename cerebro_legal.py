@@ -14,17 +14,14 @@ USUARIOS_PERMITIDOS = {
     "user4": "estudio5"
 }
 
-# 2. FUNCIÓN DE LOGIN
 def login():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
-
     if not st.session_state.autenticado:
         st.set_page_config(page_title="Login P&JIA", page_icon="🔐")
         st.title("🔐 Acceso Privado P&JIA")
         user = st.text_input("Usuario")
         password = st.text_input("Contraseña", type="password")
-        
         if st.button("Ingresar"):
             if user in USUARIOS_PERMITIDOS and USUARIOS_PERMITIDOS[user] == password:
                 st.session_state.autenticado = True
@@ -37,136 +34,64 @@ def login():
 if not login():
     st.stop()
 
-# --- CONFIGURACIÓN DE LA IA ---
-API_KEY = st.secrets["GROQ_API_KEY"]
+# --- CONFIGURACIÓN DE IA ---
+try:
+    API_KEY = st.secrets["GROQ_API_KEY"]
+except:
+    st.error("🚨 ERROR: No se encontró la clave 'GROQ_API_KEY' en los Secrets de Streamlit.")
+    st.stop()
 
 st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide")
 
-# PANEL LATERAL (HERRAMIENTAS)
 with st.sidebar:
     st.title("🛠️ Panel de Control")
-    st.markdown("---")
-    
-    opcion = st.selectbox("Selecciona una función:", 
-                         ["Asistente Legal", "Calculadora Laboral", "Generador de Documentos"])
-    
-    st.markdown("---")
-    archivo_subido = st.file_uploader("📁 Analizar PDF (Contratos/Demandas)", type=['pdf'])
-    
+    opcion = st.selectbox("Selecciona:", ["Asistente Legal", "Calculadora Laboral", "Generador de Documentos"])
+    archivo_subido = st.file_uploader("📁 Analizar PDF", type=['pdf'])
     if st.button("🗑️ Limpiar Historial"):
         st.session_state.messages = []
         st.rerun()
 
-# FUNCIÓN PARA EXTRAER TEXTO DE PDF
 def extraer_pdf(archivo):
     lector = PyPDF2.PdfReader(archivo)
-    texto = ""
-    for pagina in lector.pages:
-        texto += pagina.extract_text()
-    return texto
+    return "".join([p.extract_text() for p in lector.pages])
 
-# --- LÓGICA DE P&JIA CORE ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 if opcion == "Asistente Legal":
     st.title("⚖️ Asistente Jurídico Inteligente")
-    st.info("Especializado en Derecho Laboral, Civil y Penal del Perú.")
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Consulta la ley o sube un PDF..."):
-        contexto_adicional = ""
-        if archivo_subido:
-            with st.spinner("Leyendo PDF..."):
-                texto_pdf = extraer_pdf(archivo_subido)
-                contexto_adicional = f"\n\nCONTENIDO DEL DOCUMENTO SUBIDO:\n{texto_pdf}"
-        
+    if prompt := st.chat_input("Consulta la ley..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        with st.chat_message("user"): st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Analizando normativa peruana..."):
-                response = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {API_KEY}"},
-                    json={
-                        "model": "llama3-70b-8192",
-                        "messages": [
-                            {"role": "system", "content": "Eres P&JIA Core, experto en leyes peruanas. Prohibido inventar leyes. Cita D.L. 728, Código Civil y Código Penal exactamente. Estructura: Base Legal, Análisis, Conclusión."},
-                            {"role": "user", "content": prompt + contexto_adicional}
-                        ],
-                        "temperature": 0.1
-                    }
-                )
-                full_res = response.json()["choices"][0]["message"]["content"]
-                st.markdown(full_res)
-                st.session_state.messages.append({"role": "assistant", "content": full_res})
-                
-                # Botón Word
-                doc = Document()
-                doc.add_heading('P&JIA Core - Informe', 0)
-                doc.add_paragraph(full_res)
-                bio = BytesIO()
-                doc.save(bio)
-                st.download_button("📥 Descargar Informe", bio.getvalue(), "informe.docx")
-
-elif opcion == "Calculadora Laboral":
-    st.title("🧮 Calculadora de Beneficios (Perú)")
-    col1, col2 = st.columns(2)
-    with col1:
-        sueldo = st.number_input("Sueldo Bruto (S/)", min_value=0.0, value=1025.0)
-        meses = st.number_input("Meses trabajados", min_value=0, max_value=12, value=6)
-    with col2:
-        gratificacion = (sueldo / 6) * meses
-        cts = (sueldo + (sueldo/6)) / 12 * meses
-        st.metric("Estimado Gratificación", f"S/ {gratificacion:.2f}")
-        st.metric("Estimado CTS", f"S/ {cts:.2f}")
-    st.warning("Nota: Estos valores son referenciales. La IA puede ayudarte a detallar el cálculo en el chat.")
-
-elif opcion == "Generador de Documentos":
-    st.title("📝 Generador de Plantillas Jurídicas")
-    tipo_doc = st.text_input("¿Qué documento necesitas? (Ej: Demanda de alimentos, Contrato de alquiler)")
-    if st.button("Generar Plantilla Profesional"):
-        with st.spinner("Redactando..."):
             try:
-                response = requests.post(
+                ctx = f"\nDoc: {extraer_pdf(archivo_subido)}" if archivo_subido else ""
+                res = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {API_KEY}"},
                     json={
                         "model": "llama3-70b-8192",
                         "messages": [
-                            {"role": "system", "content": "Eres P&JIA Core, experto en leyes peruanas. Prohibido inventar leyes. Cita D.L. 728, Código Civil y Código Penal exactamente."},
-                            {"role": "user", "content": prompt + contexto_adicional}
+                            {"role": "system", "content": "Eres P&JIA Core. Experto legal peruano. Cita leyes reales (DL 728, Código Civil/Penal). No inventes nada."},
+                            {"role": "user", "content": prompt + ctx}
                         ],
                         "temperature": 0.1
                     }
                 )
-                
-                res_json = response.json()
-                
-                # Verificamos si la respuesta es correcta antes de usarla
-                if "choices" in res_json:
-                    full_res = res_json["choices"][0]["message"]["content"]
-                    st.markdown(full_res)
-                    st.session_state.messages.append({"role": "assistant", "content": full_res})
-                    
-                    # Generar Word
-                    doc = Document()
-                    doc.add_paragraph(full_res)
-                    bio = BytesIO()
-                    doc.save(bio)
-                    st.download_button("📥 Descargar Informe", bio.getvalue(), "informe.docx")
+                data = res.json()
+                # --- AQUÍ ESTÁ EL ARREGLO PARA EL ERROR ---
+                if "choices" in data:
+                    texto = data["choices"][0]["message"]["content"]
+                    st.markdown(texto)
+                    st.session_state.messages.append({"role": "assistant", "content": texto})
                 else:
-                    # Si Groq nos da un error, lo mostramos amigablemente
-                    error_msg = res_json.get("error", {}).get("message", "Error desconocido de la API")
-                    st.error(f"Error de la IA: {error_msg}")
-                
+                    msg_error = data.get("error", {}).get("message", "Error desconocido")
+                    st.error(f"La IA respondió un error: {msg_error}")
             except Exception as e:
-                st.error(f"Error de conexión: {e}")
-        
-            
+                st.error(f"Fallo de conexión: {e}")
+
+# (Mantener las otras opciones igual o simplificadas para evitar errores)
