@@ -1,85 +1,55 @@
 import streamlit as st
-import os
 import requests
-from docx import Document
-from io import BytesIO
-import PyPDF2
 
-# 1. CONFIGURACIÓN DE USUARIOS
-USUARIOS_PERMITIDOS = {
-    "admin": "clave777",
-    "user1": "peru2026",
-    "user2": "legal20",
-    "user3": "pjia01",
-    "user4": "estudio5"
-}
+# Configuración básica
+st.set_page_config(page_title="P&JIA Core", page_icon="⚖️")
 
-def login():
-    if "autenticado" not in st.session_state:
-        st.session_state.autenticado = False
-    if not st.session_state.autenticado:
-        st.set_page_config(page_title="Login P&JIA", page_icon="🔐")
-        st.title("🔐 Acceso Privado P&JIA")
-        user = st.text_input("Usuario")
-        password = st.text_input("Contraseña", type="password")
-        if st.button("Ingresar"):
-            if user in USUARIOS_PERMITIDOS and USUARIOS_PERMITIDOS[user] == password:
-                st.session_state.autenticado = True
-                st.rerun()
-            else:
-                st.error("Usuario o contraseña incorrectos")
-        return False
-    return True
+# 1. LOGIN SIMPLE
+USUARIOS = {"admin": "clave777", "user1": "peru2026"}
 
-if not login():
+if "auth" not in st.session_state:
+    st.session_state.auth = False
+
+if not st.session_state.auth:
+    st.title("🔐 Acceso P&JIA")
+    u = st.text_input("Usuario")
+    p = st.text_input("Clave", type="password")
+    if st.button("Entrar"):
+        if u in USUARIOS and USUARIOS[u] == p:
+            st.session_state.auth = True
+            st.rerun()
+        else:
+            st.error("Incorrecto")
     st.stop()
 
-# --- CONFIGURACIÓN DE IA ---
-API_KEY = st.secrets.get("GROQ_API_KEY")
+# 2. INTERFAZ DE IA
+st.title("⚖️ P&JIA Core Pro")
+api_key = st.secrets.get("GROQ_API_KEY", "").strip() # Quitamos espacios o saltos invisibles
 
-st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide")
-
-with st.sidebar:
-    st.title("🛠️ Panel de Control")
-    opcion = st.selectbox("Selecciona:", ["Asistente Legal", "Calculadora Laboral", "Generador de Documentos"])
-    archivo_subido = st.file_uploader("📁 Analizar PDF", type=['pdf'])
-    if st.button("🗑️ Limpiar Historial"):
-        st.session_state.messages = []
-        st.rerun()
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if opcion == "Asistente Legal":
-    st.title("⚖️ Asistente Jurídico Inteligente")
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]): st.markdown(m["content"])
-
-    if prompt := st.chat_input("Consulta la ley..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            try:
-                headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "llama3-70b-8192",
-                    "messages": [
-                        {"role": "system", "content": "Eres P&JIA Core, experto legal peruano. Cita leyes reales (DL 728, Código Civil, Código Penal). No inventes nada."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.1
-                }
-                response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
-                data = response.json()
-                
-                if "choices" in data:
-                    texto = data["choices"][0]["message"]["content"]
-                    st.markdown(texto)
-                    st.session_state.messages.append({"role": "assistant", "content": texto})
-                else:
-                    st.error(f"Error de Groq: {data.get('error', {}).get('message', 'Clave inválida o límite excedido')}")
-            except Exception as e:
-                st.error(f"Fallo técnico: {e}")
-
-# (Módulo de calculadora y documentos para no extender el código aquí)
+if prompt := st.chat_input("Consulta legal peruana..."):
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    with st.chat_message("assistant"):
+        try:
+            # Quitamos cualquier salto de línea que pueda venir de la clave
+            clean_key = api_key.replace("\n", "").replace("\r", "").strip()
+            
+            headers = {"Authorization": f"Bearer {clean_key}", "Content-Type": "application/json"}
+            data = {
+                "model": "llama3-70b-8192",
+                "messages": [
+                    {"role": "system", "content": "Eres P&JIA Core, experto legal peruano. Cita leyes reales (DL 728, Código Civil/Penal)."},
+                    {"role": "user", "content": prompt}
+                ]
+            }
+            r = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
+            res = r.json()
+            
+            if "choices" in res:
+                respuesta = res["choices"][0]["message"]["content"]
+                st.markdown(respuesta)
+            else:
+                st.error(f"Error de API: {res.get('error', {}).get('message', 'Clave mal configurada')}")
+        except Exception as e:
+            st.error(f"Error técnico: {e}")
