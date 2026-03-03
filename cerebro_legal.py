@@ -133,16 +133,40 @@ elif opcion == "Generador de Documentos":
     tipo_doc = st.text_input("¿Qué documento necesitas? (Ej: Demanda de alimentos, Contrato de alquiler)")
     if st.button("Generar Plantilla Profesional"):
         with st.spinner("Redactando..."):
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {API_KEY}"},
-                json={
-                    "model": "llama3-70b-8192",
-                    "messages": [{"role": "system", "content": "Genera plantillas legales formales para Perú."},
-                                 {"role": "user", "content": f"Redacta una plantilla profesional de {tipo_doc}"}]
-                }
-            )
-            plantilla = response.json()["choices"][0]["message"]["content"]
-            st.text_area("Vista previa:", plantilla, height=400)
-            doc = Document(); doc.add_paragraph(plantilla); bio = BytesIO(); doc.save(bio)
-            st.download_button("📥 Descargar Plantilla", bio.getvalue(), "plantilla.docx")
+            try:
+                response = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {API_KEY}"},
+                    json={
+                        "model": "llama3-70b-8192",
+                        "messages": [
+                            {"role": "system", "content": "Eres P&JIA Core, experto en leyes peruanas. Prohibido inventar leyes. Cita D.L. 728, Código Civil y Código Penal exactamente."},
+                            {"role": "user", "content": prompt + contexto_adicional}
+                        ],
+                        "temperature": 0.1
+                    }
+                )
+                
+                res_json = response.json()
+                
+                # Verificamos si la respuesta es correcta antes de usarla
+                if "choices" in res_json:
+                    full_res = res_json["choices"][0]["message"]["content"]
+                    st.markdown(full_res)
+                    st.session_state.messages.append({"role": "assistant", "content": full_res})
+                    
+                    # Generar Word
+                    doc = Document()
+                    doc.add_paragraph(full_res)
+                    bio = BytesIO()
+                    doc.save(bio)
+                    st.download_button("📥 Descargar Informe", bio.getvalue(), "informe.docx")
+                else:
+                    # Si Groq nos da un error, lo mostramos amigablemente
+                    error_msg = res_json.get("error", {}).get("message", "Error desconocido de la API")
+                    st.error(f"Error de la IA: {error_msg}")
+                
+            except Exception as e:
+                st.error(f"Error de conexión: {e}")
+        
+            
