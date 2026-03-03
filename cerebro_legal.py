@@ -4,7 +4,7 @@ import requests
 from docx import Document
 from io import BytesIO
 
-# 1. CONFIGURACIÓN DE USUARIOS (Máximo 5)
+# 1. CONFIGURACIÓN DE USUARIOS (Tus 5 accesos privados)
 USUARIOS_PERMITIDOS = {
     "admin": "clave777",
     "user1": "peru2026",
@@ -39,29 +39,46 @@ if not login():
 # --- CONFIGURACIÓN DE LA IA (DESPUÉS DEL LOGIN) ---
 
 # Obtener la API Key desde los Secrets de Streamlit
-API_KEY = st.secrets["GROQ_API_KEY"]
+try:
+    API_KEY = st.secrets["GROQ_API_KEY"]
+except:
+    st.error("Error: No se encontró la API_KEY en Secrets.")
+    st.stop()
 
-st.title("⚖️ P&JIA Core - Especialista Legal Perú")
-st.markdown("---")
+st.set_page_config(page_title="P&JIA Core", page_icon="⚖️")
+st.title("⚖️ P&JIA Core - Inteligencia Legal")
+st.subheader("Especialista en Derecho Laboral, Civil y Penal (Perú)")
+
+# Barra lateral para utilidades
+with st.sidebar:
+    st.header("Herramientas")
+    archivo_subido = st.file_uploader("Subir documento para análisis (PDF/Texto)", type=['pdf', 'txt'])
+    if st.button("Limpiar Chat"):
+        st.session_state.messages = []
+        st.rerun()
 
 # Historial de chat
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mostrar mensajes previos
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # Entrada del usuario
-if prompt := st.chat_input("Escribe tu consulta legal (Civil, Laboral o Penal)..."):
+if prompt := st.chat_input("Escribe tu consulta legal aquí..."):
+    # Si hay un archivo subido, lo mencionamos en el contexto
+    contexto_archivo = ""
+    if archivo_subido:
+        contexto_archivo = f"\n[Contexto del archivo subido: {archivo_subido.name}]"
+    
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Llamada a la IA con el "Cerebro Legal" (Instrucciones de no inventar leyes)
+    # Respuesta de la IA con el Prompt Maestro especializado
     with st.chat_message("assistant"):
-        with st.spinner("Consultando base legal..."):
+        with st.spinner("Analizando base legal peruana..."):
             try:
                 response = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
@@ -70,41 +87,44 @@ if prompt := st.chat_input("Escribe tu consulta legal (Civil, Laboral o Penal)..
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "llama3-8b-8192",
+                        "model": "llama3-70b-8192", # Usamos el modelo más potente
                         "messages": [
                             {
                                 "role": "system", 
                                 "content": (
-                                    "Eres P&JIA Core, una IA experta en Derecho Peruano. "
-                                    "IMPORTANTE: No inventes artículos ni leyes. Cita las normas exactamente como son. "
-                                    "Si es Laboral: usa el D.L. 728. Si es Civil: Código Civil de 1984. "
-                                    "Si es Penal: Código Penal vigente. "
-                                    "Estructura: 1. Base Legal, 2. Análisis, 3. Conclusión."
+                                    "Eres P&JIA Core, una IA de nivel superior experta en Derecho Peruano. "
+                                    "NORMAS DE CONDUCTA: "
+                                    "1. NO INVENTAR artículos ni leyes. Cita la normativa exactamente como está redactada. "
+                                    "2. LABORAL: Usa D.L. 728, Ley 29783, y normas de SUNAFIL. "
+                                    "3. CIVIL: Usa el Código Civil de 1984 y el Código Procesal Civil. "
+                                    "4. PENAL: Usa el Código Penal y Código Procesal Penal de 2004. "
+                                    "5. RESPUESTA: Base Legal, Análisis Jurídico y Recomendación Estratégica."
                                 )
                             },
-                            {"role": "user", "content": prompt}
+                            {"role": "user", "content": prompt + contexto_archivo}
                         ],
-                        "temperature": 0.2 # Baja temperatura para mayor precisión
+                        "temperature": 0.1 # Precisión máxima
                     }
                 )
                 
-                full_response = response.json()["choices"][0]["message"]["content"]
+                res_json = response.json()
+                full_response = res_json["choices"][0]["message"]["content"]
                 st.markdown(full_response)
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 
-                # Botón para descargar en Word
+                # Generador de Word corregido
                 doc = Document()
-                doc.add_heading('Informe Legal - P&JIA Core', 0)
+                doc.add_heading('P&JIA Core - Informe Jurídico', 0)
                 doc.add_paragraph(full_response)
                 bio = BytesIO()
                 doc.save(bio)
                 
                 st.download_button(
-                    label="📥 Descargar Informe en Word",
+                    label="📥 Descargar Respuesta en Word",
                     data=bio.getvalue(),
-                    file_name="informe_legal.docx",
+                    file_name="consulta_legal_pjia.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
                 
             except Exception as e:
-                st.error(f"Error de conexión: {e}")
+                st.error("Hubo un error en la consulta. Verifica tu API KEY en Secrets.")
