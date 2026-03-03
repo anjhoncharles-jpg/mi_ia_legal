@@ -1,13 +1,15 @@
 import streamlit as st
 import os
 
-# 1. Configuración de Usuarios (Asegúrate de escribirlos igual al loguearte)
+# Configuración de los 5 usuarios (No cambies las palabras en inglés)
 USUARIOS_PERMITIDOS = {
     "admin": "clave777",
-    "user1": "peru2026"
+    "user1": "peru2026",
+    "user2": "legal20",
+    "user3": "pjia01",
+    "user4": "estudio5"
 }
 
-# 2. Función de Login
 def login():
     if "autenticado" not in st.session_state:
         st.session_state.autenticado = False
@@ -26,10 +28,9 @@ def login():
         return False
     return True
 
-# 3. Control de acceso
 if not login():
     st.stop()
 
-# --- AQUÍ EMPIEZA TU CÓDIGO DE P&JIA Core ---
+# --- AQUÍ EMPIEZA TU CÓDIGO ORIGINAL ---
 st.title("⚖️ P&JIA Core")
-# Agrega aquí el resto de tu código original...
+# Pega debajo de esto el resto de tu código que ya funcionaba
