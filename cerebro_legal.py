@@ -3,8 +3,9 @@ import os
 import requests
 from docx import Document
 from io import BytesIO
+import PyPDF2
 
-# 1. CONFIGURACIÓN DE USUARIOS (Tus 5 accesos privados)
+# 1. CONFIGURACIÓN DE USUARIOS
 USUARIOS_PERMITIDOS = {
     "admin": "clave777",
     "user1": "peru2026",
@@ -36,95 +37,112 @@ def login():
 if not login():
     st.stop()
 
-# --- CONFIGURACIÓN DE LA IA (DESPUÉS DEL LOGIN) ---
+# --- CONFIGURACIÓN DE LA IA ---
+API_KEY = st.secrets["GROQ_API_KEY"]
 
-# Obtener la API Key desde los Secrets de Streamlit
-try:
-    API_KEY = st.secrets["GROQ_API_KEY"]
-except:
-    st.error("Error: No se encontró la API_KEY en Secrets.")
-    st.stop()
+st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide")
 
-st.set_page_config(page_title="P&JIA Core", page_icon="⚖️")
-st.title("⚖️ P&JIA Core - Inteligencia Legal")
-st.subheader("Especialista en Derecho Laboral, Civil y Penal (Perú)")
-
-# Barra lateral para utilidades
+# PANEL LATERAL (HERRAMIENTAS)
 with st.sidebar:
-    st.header("Herramientas")
-    archivo_subido = st.file_uploader("Subir documento para análisis (PDF/Texto)", type=['pdf', 'txt'])
-    if st.button("Limpiar Chat"):
+    st.title("🛠️ Panel de Control")
+    st.markdown("---")
+    
+    opcion = st.selectbox("Selecciona una función:", 
+                         ["Asistente Legal", "Calculadora Laboral", "Generador de Documentos"])
+    
+    st.markdown("---")
+    archivo_subido = st.file_uploader("📁 Analizar PDF (Contratos/Demandas)", type=['pdf'])
+    
+    if st.button("🗑️ Limpiar Historial"):
         st.session_state.messages = []
         st.rerun()
 
-# Historial de chat
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# FUNCIÓN PARA EXTRAER TEXTO DE PDF
+def extraer_pdf(archivo):
+    lector = PyPDF2.PdfReader(archivo)
+    texto = ""
+    for pagina in lector.pages:
+        texto += pagina.extract_text()
+    return texto
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# --- LÓGICA DE P&JIA CORE ---
 
-# Entrada del usuario
-if prompt := st.chat_input("Escribe tu consulta legal aquí..."):
-    # Si hay un archivo subido, lo mencionamos en el contexto
-    contexto_archivo = ""
-    if archivo_subido:
-        contexto_archivo = f"\n[Contexto del archivo subido: {archivo_subido.name}]"
-    
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+if opcion == "Asistente Legal":
+    st.title("⚖️ Asistente Jurídico Inteligente")
+    st.info("Especializado en Derecho Laboral, Civil y Penal del Perú.")
 
-    # Respuesta de la IA con el Prompt Maestro especializado
-    with st.chat_message("assistant"):
-        with st.spinner("Analizando base legal peruana..."):
-            try:
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("Consulta la ley o sube un PDF..."):
+        contexto_adicional = ""
+        if archivo_subido:
+            with st.spinner("Leyendo PDF..."):
+                texto_pdf = extraer_pdf(archivo_subido)
+                contexto_adicional = f"\n\nCONTENIDO DEL DOCUMENTO SUBIDO:\n{texto_pdf}"
+        
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Analizando normativa peruana..."):
                 response = requests.post(
                     "https://api.groq.com/openai/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {API_KEY}",
-                        "Content-Type": "application/json"
-                    },
+                    headers={"Authorization": f"Bearer {API_KEY}"},
                     json={
-                        "model": "llama3-70b-8192", # Usamos el modelo más potente
+                        "model": "llama3-70b-8192",
                         "messages": [
-                            {
-                                "role": "system", 
-                                "content": (
-                                    "Eres P&JIA Core, una IA de nivel superior experta en Derecho Peruano. "
-                                    "NORMAS DE CONDUCTA: "
-                                    "1. NO INVENTAR artículos ni leyes. Cita la normativa exactamente como está redactada. "
-                                    "2. LABORAL: Usa D.L. 728, Ley 29783, y normas de SUNAFIL. "
-                                    "3. CIVIL: Usa el Código Civil de 1984 y el Código Procesal Civil. "
-                                    "4. PENAL: Usa el Código Penal y Código Procesal Penal de 2004. "
-                                    "5. RESPUESTA: Base Legal, Análisis Jurídico y Recomendación Estratégica."
-                                )
-                            },
-                            {"role": "user", "content": prompt + contexto_archivo}
+                            {"role": "system", "content": "Eres P&JIA Core, experto en leyes peruanas. Prohibido inventar leyes. Cita D.L. 728, Código Civil y Código Penal exactamente. Estructura: Base Legal, Análisis, Conclusión."},
+                            {"role": "user", "content": prompt + contexto_adicional}
                         ],
-                        "temperature": 0.1 # Precisión máxima
+                        "temperature": 0.1
                     }
                 )
+                full_res = response.json()["choices"][0]["message"]["content"]
+                st.markdown(full_res)
+                st.session_state.messages.append({"role": "assistant", "content": full_res})
                 
-                res_json = response.json()
-                full_response = res_json["choices"][0]["message"]["content"]
-                st.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
-                
-                # Generador de Word corregido
+                # Botón Word
                 doc = Document()
-                doc.add_heading('P&JIA Core - Informe Jurídico', 0)
-                doc.add_paragraph(full_response)
+                doc.add_heading('P&JIA Core - Informe', 0)
+                doc.add_paragraph(full_res)
                 bio = BytesIO()
                 doc.save(bio)
-                
-                st.download_button(
-                    label="📥 Descargar Respuesta en Word",
-                    data=bio.getvalue(),
-                    file_name="consulta_legal_pjia.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-                
-            except Exception as e:
-                st.error("Hubo un error en la consulta. Verifica tu API KEY en Secrets.")
+                st.download_button("📥 Descargar Informe", bio.getvalue(), "informe.docx")
+
+elif opcion == "Calculadora Laboral":
+    st.title("🧮 Calculadora de Beneficios (Perú)")
+    col1, col2 = st.columns(2)
+    with col1:
+        sueldo = st.number_input("Sueldo Bruto (S/)", min_value=0.0, value=1025.0)
+        meses = st.number_input("Meses trabajados", min_value=0, max_value=12, value=6)
+    with col2:
+        gratificacion = (sueldo / 6) * meses
+        cts = (sueldo + (sueldo/6)) / 12 * meses
+        st.metric("Estimado Gratificación", f"S/ {gratificacion:.2f}")
+        st.metric("Estimado CTS", f"S/ {cts:.2f}")
+    st.warning("Nota: Estos valores son referenciales. La IA puede ayudarte a detallar el cálculo en el chat.")
+
+elif opcion == "Generador de Documentos":
+    st.title("📝 Generador de Plantillas Jurídicas")
+    tipo_doc = st.text_input("¿Qué documento necesitas? (Ej: Demanda de alimentos, Contrato de alquiler)")
+    if st.button("Generar Plantilla Profesional"):
+        with st.spinner("Redactando..."):
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {API_KEY}"},
+                json={
+                    "model": "llama3-70b-8192",
+                    "messages": [{"role": "system", "content": "Genera plantillas legales formales para Perú."},
+                                 {"role": "user", "content": f"Redacta una plantilla profesional de {tipo_doc}"}]
+                }
+            )
+            plantilla = response.json()["choices"][0]["message"]["content"]
+            st.text_area("Vista previa:", plantilla, height=400)
+            doc = Document(); doc.add_paragraph(plantilla); bio = BytesIO(); doc.save(bio)
+            st.download_button("📥 Descargar Plantilla", bio.getvalue(), "plantilla.docx")
