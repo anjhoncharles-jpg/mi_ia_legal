@@ -35,11 +35,7 @@ if not login():
     st.stop()
 
 # --- CONFIGURACIÓN DE IA ---
-try:
-    API_KEY = st.secrets["GROQ_API_KEY"]
-except:
-    st.error("🚨 ERROR: No se encontró la clave 'GROQ_API_KEY' en los Secrets de Streamlit.")
-    st.stop()
+API_KEY = st.secrets.get("GROQ_API_KEY")
 
 st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide")
 
@@ -50,10 +46,6 @@ with st.sidebar:
     if st.button("🗑️ Limpiar Historial"):
         st.session_state.messages = []
         st.rerun()
-
-def extraer_pdf(archivo):
-    lector = PyPDF2.PdfReader(archivo)
-    return "".join([p.extract_text() for p in lector.pages])
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -69,29 +61,25 @@ if opcion == "Asistente Legal":
 
         with st.chat_message("assistant"):
             try:
-                ctx = f"\nDoc: {extraer_pdf(archivo_subido)}" if archivo_subido else ""
-                res = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {API_KEY}"},
-                    json={
-                        "model": "llama3-70b-8192",
-                        "messages": [
-                            {"role": "system", "content": "Eres P&JIA Core. Experto legal peruano. Cita leyes reales (DL 728, Código Civil/Penal). No inventes nada."},
-                            {"role": "user", "content": prompt + ctx}
-                        ],
-                        "temperature": 0.1
-                    }
-                )
-                data = res.json()
-                # --- AQUÍ ESTÁ EL ARREGLO PARA EL ERROR ---
+                headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama3-70b-8192",
+                    "messages": [
+                        {"role": "system", "content": "Eres P&JIA Core, experto legal peruano. Cita leyes reales (DL 728, Código Civil, Código Penal). No inventes nada."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.1
+                }
+                response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                data = response.json()
+                
                 if "choices" in data:
                     texto = data["choices"][0]["message"]["content"]
                     st.markdown(texto)
                     st.session_state.messages.append({"role": "assistant", "content": texto})
                 else:
-                    msg_error = data.get("error", {}).get("message", "Error desconocido")
-                    st.error(f"La IA respondió un error: {msg_error}")
+                    st.error(f"Error de Groq: {data.get('error', {}).get('message', 'Clave inválida o límite excedido')}")
             except Exception as e:
-                st.error(f"Fallo de conexión: {e}")
+                st.error(f"Fallo técnico: {e}")
 
-# (Mantener las otras opciones igual o simplificadas para evitar errores)
+# (Módulo de calculadora y documentos para no extender el código aquí)
