@@ -4,8 +4,8 @@ import requests
 # Configuración básica
 st.set_page_config(page_title="P&JIA Core", page_icon="⚖️")
 
-# 1. LOGIN SIMPLE
-USUARIOS = {"admin": "clave777", "user1": "peru2026"}
+# 1. LOGIN
+USUARIOS = {"admin": "clave777", "user1": "peru2026", "user2": "legal20", "user3": "pjia01", "user4": "estudio5"}
 
 if "auth" not in st.session_state:
     st.session_state.auth = False
@@ -13,18 +13,22 @@ if "auth" not in st.session_state:
 if not st.session_state.auth:
     st.title("🔐 Acceso P&JIA")
     u = st.text_input("Usuario")
-    p = st.text_input("Clave", type="password")
-    if st.button("Entrar"):
+    p = st.text_input("Contraseña", type="password")
+    if st.button("Ingresar"):
         if u in USUARIOS and USUARIOS[u] == p:
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Incorrecto")
+            st.error("Credenciales incorrectas")
     st.stop()
 
-# 2. INTERFAZ DE IA
+# 2. INTERFAZ
 st.title("⚖️ P&JIA Core Pro")
-api_key = st.secrets.get("GROQ_API_KEY", "").strip() # Quitamos espacios o saltos invisibles
+st.subheader("Especialista Legal Perú")
+
+# Obtenemos y LIMPIAMOS la clave de cualquier espacio o salto de línea
+raw_key = st.secrets.get("GROQ_API_KEY", "")
+api_key = raw_key.replace("\n", "").replace("\r", "").replace(" ", "").strip()
 
 if prompt := st.chat_input("Consulta legal peruana..."):
     with st.chat_message("user"):
@@ -32,24 +36,31 @@ if prompt := st.chat_input("Consulta legal peruana..."):
     
     with st.chat_message("assistant"):
         try:
-            # Quitamos cualquier salto de línea que pueda venir de la clave
-            clean_key = api_key.replace("\n", "").replace("\r", "").strip()
-            
-            headers = {"Authorization": f"Bearer {clean_key}", "Content-Type": "application/json"}
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
             data = {
                 "model": "llama3-70b-8192",
                 "messages": [
-                    {"role": "system", "content": "Eres P&JIA Core, experto legal peruano. Cita leyes reales (DL 728, Código Civil/Penal)."},
+                    {
+                        "role": "system", 
+                        "content": "Eres P&JIA Core, experto legal peruano. Cita leyes reales como el D.L. 728, Código Civil y Penal. No inventes artículos."
+                    },
                     {"role": "user", "content": prompt}
-                ]
+                ],
+                "temperature": 0.1
             }
-            r = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
-            res = r.json()
             
-            if "choices" in res:
-                respuesta = res["choices"][0]["message"]["content"]
+            response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=data)
+            res_json = response.json()
+            
+            if "choices" in res_json:
+                respuesta = res_json["choices"][0]["message"]["content"]
                 st.markdown(respuesta)
             else:
-                st.error(f"Error de API: {res.get('error', {}).get('message', 'Clave mal configurada')}")
+                error_info = res_json.get("error", {}).get("message", "Error de configuración")
+                st.error(f"Error de la IA: {error_info}")
+                
         except Exception as e:
-            st.error(f"Error técnico: {e}")
+            st.error(f"Fallo de conexión: {e}")
