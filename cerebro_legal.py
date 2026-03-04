@@ -31,10 +31,10 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Especialista Legal Perú 2026")
 
-# 4. MÓDULO: ASISTENTE JURÍDICO (Resúmenes Analíticos)
+# 4. MÓDULO: ASISTENTE JURÍDICO
 if opcion == "Asistente Jurídico":
     st.title("⚖️ Asistente Jurídico Inteligente")
-    st.info("Resúmenes ejecutivos basados en D.L. 728, Código Civil y Penal.")
+    st.info("Resúmenes analíticos: D.L. 728, Código Civil y Penal.")
     
     if prompt := st.chat_input("Consulta la normativa..."):
         with st.chat_message("user"): st.markdown(prompt)
@@ -42,45 +42,54 @@ if opcion == "Asistente Jurídico":
             try:
                 headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                 payload = {
-                    "model": "llama-3.3-70b-8192",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role": "system", "content": "Eres P&JIA Core. No copies los artículos textualmente. Ofrece resúmenes analíticos y precisos de la norma peruana. Estructura: 1. Resumen de la falta/norma, 2. Implicancia legal, 3. Recomendación."},
+                        {"role": "system", "content": "Eres P&JIA Core. No copies artículos textualmente. Ofrece resúmenes analíticos de la norma peruana. Estructura: 1. Resumen de la falta, 2. Implicancia legal, 3. Recomendación."},
                         {"role": "user", "content": prompt}
                     ],
-                    "temperature": 0.3
+                    "temperature": 0.2
                 }
-                res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload).json()
-                st.markdown(res["choices"][0]["message"]["content"])
-            except:
-                st.error("Error de conexión con la IA.")
+                response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                res_data = response.json()
+                if "choices" in res_data:
+                    st.markdown(res_data["choices"][0]["message"]["content"])
+                else:
+                    st.error(f"Error de API: {res_data.get('error', {}).get('message', 'Clave no válida')}")
+            except Exception as e:
+                st.error(f"Error de conexión: {e}")
 
-# 5. MÓDULO: CALCULADORA DE BENEFICIOS (Nuevo)
+# 5. MÓDULO: CALCULADORA DE BENEFICIOS (Optimizado)
 elif opcion == "Calculadora de Beneficios":
     st.title("🧮 Calculadora de Beneficios Sociales (Régimen General)")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        sueldo = st.number_input("Sueldo Mensual (S/.)", min_value=0.0, value=1025.0)
-        meses = st.number_input("Meses laborados en el periodo", min_value=1, max_value=12, value=6)
-    
-    with col2:
-        asignacion = st.checkbox("¿Recibe Asignación Familiar?")
-        monto_af = 102.50 if asignacion else 0.0
-        st.write(f"Asignación Familiar: S/. {monto_af}")
+    with st.container():
+        col1, col2 = st.columns(2)
+        with col1:
+            sueldo = st.number_input("Sueldo Mensual (S/.)", min_value=1025.0, step=100.0)
+            meses = st.slider("Meses laborados (en el semestre/año)", 1, 12, 6)
+        with col2:
+            asig_fam = st.checkbox("¿Tiene Asignación Familiar?")
+            monto_af = 102.50 if asig_fam else 0.0
+            st.write(f"Asignación Familiar: S/. {monto_af}")
 
-    base_calculo = sueldo + monto_af
+    base = sueldo + monto_af
     
-    st.markdown("### 📊 Resultados Estimados")
-    c1, c2, c3 = st.columns(3)
+    st.markdown("---")
+    st.subheader("📊 Estimación de Beneficios")
     
-    # Cálculos rápidos
-    gratificacion = (base_calculo / 6) * meses
-    bonificacion = gratificacion * 0.09
-    cts_estimada = ((base_calculo + (sueldo/6)) / 12) * meses
-    vacaciones = (base_calculo / 12) * meses
+    res1, res2, res3 = st.columns(3)
+    
+    # Gratificación (Sueldo + AF)
+    grati = (base / 6) * meses
+    boni = grati * 0.09
+    res1.metric("Gratificación + Bonif. (9%)", f"S/. {grati + boni:,.2f}")
+    
+    # CTS (Base + 1/6 Grati)
+    cts = ((base + (base/6)) / 12) * meses
+    res2.metric("CTS Proyectada", f"S/. {cts:,.2f}")
+    
+    # Vacaciones (Base / 12 meses)
+    vacas = (base / 12) * meses
+    res3.metric("Vacaciones Truncas", f"S/. {vacas:,.2f}")
 
-    c1.metric("Gratificación + Bonif.", f"S/. {gratificacion + bonificacion:,.2 False}")
-    c2.metric("CTS Proyectada", f"S/. {cts_estimada:,.2f}")
-    c3.metric("Vacaciones Truncas", f"S/. {vacaciones:,.2f}")
-    
-    st.warning("Nota: Estos montos son referenciales para el Régimen General. No incluyen descuentos de ley (AFP/ONP).")
+    st.caption("Nota: Cálculos referenciales para el sector privado (Régimen General).")
