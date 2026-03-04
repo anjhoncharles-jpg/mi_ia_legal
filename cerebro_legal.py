@@ -1,23 +1,14 @@
 import streamlit as st
 import requests
 
-# 1. CONFIGURACIÓN DE ACCESO (Tus 5 usuarios)
-USUARIOS = {
-    "admin": "clave777",
-    "user1": "peru2026",
-    "user2": "legal20",
-    "user3": "pjia01",
-    "user4": "estudio5"
-}
+# 1. ACCESO (Tus 5 usuarios)
+USUARIOS = {"admin": "clave777", "user1": "peru2026", "user2": "legal20", "user3": "pjia01", "user4": "estudio5"}
 
-# Inicialización de estado de autenticación
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
-# Interfaz de Login
 if not st.session_state.auth:
-    st.set_page_config(page_title="Login P&JIA", page_icon="🔐")
-    st.title("🔐 Acceso Privado P&JIA Core")
+    st.title("🔐 Acceso P&JIA Core")
     u = st.text_input("Usuario")
     p = st.text_input("Contraseña", type="password")
     if st.button("Ingresar"):
@@ -25,66 +16,71 @@ if not st.session_state.auth:
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Credenciales incorrectas. Intente de nuevo.")
+            st.error("Credenciales incorrectas")
     st.stop()
 
-# 2. CONFIGURACIÓN DE LA INTERFAZ PRINCIPAL
+# 2. CONFIGURACIÓN Y LIMPIEZA DE API
 st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide")
-st.title("⚖️ P&JIA Core Pro")
-st.subheader("Consultor Legal Especializado (Perú)")
-st.info("Especialidad: Derecho Laboral, Civil y Penal.")
-
-# 3. GESTIÓN DE LA API KEY (Limpieza automática)
 raw_key = st.secrets.get("GROQ_API_KEY", "")
-# Limpiamos comillas, espacios y saltos de línea que causan el error "Invalid API Key"
 api_key = raw_key.replace("\n", "").replace("\r", "").replace(" ", "").replace('"', '').replace("'", "").strip()
 
-# 4. LÓGICA DEL CHAT
-if prompt := st.chat_input("Realice su consulta legal..."):
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    with st.chat_message("assistant"):
-        try:
-            # Configuración de la petición a Groq
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "model": "llama-3.3-70b-versatile", # Modelo actualizado para evitar el error de 'decommissioned'
-                "messages": [
-                    {
-                        "role": "system", 
-                        "content": "Eres P&JIA Core, experto legal peruano. NO INVENTES LEYES. Usa estrictamente el D.L. 728, Código Civil 1984 y Código Penal. Si no conoces la respuesta exacta, indícalo."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.1
-            }
-            
-            # Petición al servidor
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions", 
-                headers=headers, 
-                json=payload
-            )
-            
-            res_json = response.json()
-            
-            # Manejo de la respuesta
-            if "choices" in res_json:
-                respuesta_ia = res_json["choices"][0]["message"]["content"]
-                st.markdown(respuesta_ia)
-            else:
-                # Si Groq devuelve un error, lo mostramos de forma legible
-                error_msg = res_json.get("error", {}).get("message", "Error desconocido de configuración.")
-                st.error(f"Aviso del Sistema: {error_msg}")
-                
-        except Exception as e:
-            st.error(f"Fallo técnico de conexión: {e}")
+# 3. MENÚ LATERAL
+with st.sidebar:
+    st.title("⚖️ P&JIA Panel")
+    opcion = st.radio("Seleccione función:", ["Asistente Jurídico", "Calculadora de Beneficios"])
+    st.markdown("---")
+    st.caption("Especialista Legal Perú 2026")
 
-# Pie de página
-st.markdown("---")
-st.caption("P&JIA Core Pro - Sistema de Inteligencia Jurídica 2026")
+# 4. MÓDULO: ASISTENTE JURÍDICO (Resúmenes Analíticos)
+if opcion == "Asistente Jurídico":
+    st.title("⚖️ Asistente Jurídico Inteligente")
+    st.info("Resúmenes ejecutivos basados en D.L. 728, Código Civil y Penal.")
+    
+    if prompt := st.chat_input("Consulta la normativa..."):
+        with st.chat_message("user"): st.markdown(prompt)
+        with st.chat_message("assistant"):
+            try:
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama-3.3-70b-8192",
+                    "messages": [
+                        {"role": "system", "content": "Eres P&JIA Core. No copies los artículos textualmente. Ofrece resúmenes analíticos y precisos de la norma peruana. Estructura: 1. Resumen de la falta/norma, 2. Implicancia legal, 3. Recomendación."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.3
+                }
+                res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload).json()
+                st.markdown(res["choices"][0]["message"]["content"])
+            except:
+                st.error("Error de conexión con la IA.")
+
+# 5. MÓDULO: CALCULADORA DE BENEFICIOS (Nuevo)
+elif opcion == "Calculadora de Beneficios":
+    st.title("🧮 Calculadora de Beneficios Sociales (Régimen General)")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        sueldo = st.number_input("Sueldo Mensual (S/.)", min_value=0.0, value=1025.0)
+        meses = st.number_input("Meses laborados en el periodo", min_value=1, max_value=12, value=6)
+    
+    with col2:
+        asignacion = st.checkbox("¿Recibe Asignación Familiar?")
+        monto_af = 102.50 if asignacion else 0.0
+        st.write(f"Asignación Familiar: S/. {monto_af}")
+
+    base_calculo = sueldo + monto_af
+    
+    st.markdown("### 📊 Resultados Estimados")
+    c1, c2, c3 = st.columns(3)
+    
+    # Cálculos rápidos
+    gratificacion = (base_calculo / 6) * meses
+    bonificacion = gratificacion * 0.09
+    cts_estimada = ((base_calculo + (sueldo/6)) / 12) * meses
+    vacaciones = (base_calculo / 12) * meses
+
+    c1.metric("Gratificación + Bonif.", f"S/. {gratificacion + bonificacion:,.2 False}")
+    c2.metric("CTS Proyectada", f"S/. {cts_estimada:,.2f}")
+    c3.metric("Vacaciones Truncas", f"S/. {vacaciones:,.2f}")
+    
+    st.warning("Nota: Estos montos son referenciales para el Régimen General. No incluyen descuentos de ley (AFP/ONP).")
