@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-# 1. ACCESO PARA TUS 5 USUARIOS
+# 1. CONFIGURACIÓN DE ACCESO (Tus 5 usuarios)
 USUARIOS = {
     "admin": "clave777",
     "user1": "peru2026",
@@ -10,11 +10,14 @@ USUARIOS = {
     "user4": "estudio5"
 }
 
+# Inicialización de estado de autenticación
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
+# Interfaz de Login
 if not st.session_state.auth:
-    st.title("🔐 Acceso P&JIA Core")
+    st.set_page_config(page_title="Login P&JIA", page_icon="🔐")
+    st.title("🔐 Acceso Privado P&JIA Core")
     u = st.text_input("Usuario")
     p = st.text_input("Contraseña", type="password")
     if st.button("Ingresar"):
@@ -22,41 +25,66 @@ if not st.session_state.auth:
             st.session_state.auth = True
             st.rerun()
         else:
-            st.error("Credenciales incorrectas")
+            st.error("Credenciales incorrectas. Intente de nuevo.")
     st.stop()
 
-# 2. INTERFAZ PROFESIONAL
+# 2. CONFIGURACIÓN DE LA INTERFAZ PRINCIPAL
+st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide")
 st.title("⚖️ P&JIA Core Pro")
 st.subheader("Consultor Legal Especializado (Perú)")
+st.info("Especialidad: Derecho Laboral, Civil y Penal.")
 
-# LIMPIEZA EXTREMA DE API KEY
-# Obtenemos la clave y quitamos CUALQUER espacio, comilla o salto de línea
-api_key = st.secrets.get("GROQ_API_KEY", "").strip().strip('"').strip("'").replace(" ", "").replace("\n", "").replace("\r", "")
+# 3. GESTIÓN DE LA API KEY (Limpieza automática)
+raw_key = st.secrets.get("GROQ_API_KEY", "")
+# Limpiamos comillas, espacios y saltos de línea que causan el error "Invalid API Key"
+api_key = raw_key.replace("\n", "").replace("\r", "").replace(" ", "").replace('"', '').replace("'", "").strip()
 
-if prompt := st.chat_input("Realice su consulta legal (Laboral, Civil o Penal)..."):
+# 4. LÓGICA DEL CHAT
+if prompt := st.chat_input("Realice su consulta legal..."):
     with st.chat_message("user"):
         st.markdown(prompt)
     
     with st.chat_message("assistant"):
         try:
-            if not api_key:
-                st.error("Error: No se encontró la API Key en los Secrets.")
+            # Configuración de la petición a Groq
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "model": "llama-3.3-70b-versatile", # Modelo actualizado para evitar el error de 'decommissioned'
+                "messages": [
+                    {
+                        "role": "system", 
+                        "content": "Eres P&JIA Core, experto legal peruano. NO INVENTES LEYES. Usa estrictamente el D.L. 728, Código Civil 1984 y Código Penal. Si no conoces la respuesta exacta, indícalo."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.1
+            }
+            
+            # Petición al servidor
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions", 
+                headers=headers, 
+                json=payload
+            )
+            
+            res_json = response.json()
+            
+            # Manejo de la respuesta
+            if "choices" in res_json:
+                respuesta_ia = res_json["choices"][0]["message"]["content"]
+                st.markdown(respuesta_ia)
             else:
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                payload = {
-                    "model": "llama3-70b-8192",
-                    "messages": [
-                        {"role": "system", "content": "Eres P&JIA Core, experto legal peruano. Cita leyes reales (DL 728, Código Civil/Penal). No inventes nada."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.1
-                }
-                response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
-                data = response.json()
+                # Si Groq devuelve un error, lo mostramos de forma legible
+                error_msg = res_json.get("error", {}).get("message", "Error desconocido de configuración.")
+                st.error(f"Aviso del Sistema: {error_msg}")
                 
-                if "choices" in data:
-                    st.markdown(data["choices"][0]["message"]["content"])
-                else:
-                    st.error(f"Aviso del Sistema: {data.get('error', {}).get('message', 'Error desconocido')}")
         except Exception as e:
             st.error(f"Fallo técnico de conexión: {e}")
+
+# Pie de página
+st.markdown("---")
+st.caption("P&JIA Core Pro - Sistema de Inteligencia Jurídica 2026")
