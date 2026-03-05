@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 from docx import Document
+from docx.shared import Pt, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
 # 1. ACCESO (Tus 5 usuarios)
@@ -10,7 +12,8 @@ if "auth" not in st.session_state:
     st.session_state.auth = False
 
 if not st.session_state.auth:
-    st.title("🔐 Acceso P&JIA Core")
+    st.set_page_config(page_title="Login P&JIA", page_icon="🔐")
+    st.title("🔐 Acceso Privado P&JIA Core")
     u = st.text_input("Usuario")
     p = st.text_input("Contraseña", type="password")
     if st.button("Ingresar"):
@@ -26,11 +29,40 @@ st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide
 raw_key = st.secrets.get("GROQ_API_KEY", "")
 api_key = raw_key.replace("\n", "").replace("\r", "").replace(" ", "").replace('"', '').replace("'", "").strip()
 
-# Función para crear el archivo Word
-def crear_word(texto):
+# Función para crear el archivo Word con Identidad Corporativa
+def crear_word_profesional(titulo_escrito, contenido):
     doc = Document()
-    for linea in texto.split('\n'):
-        doc.add_paragraph(linea)
+    
+    # Encabezado P&JIA
+    header = doc.sections[0].header
+    p = header.paragraphs[0]
+    p.text = "P&JIA - CONSULTORES LEGALES\nEspecialistas en Derecho Laboral, Civil y Penal"
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    
+    # Título del Documento
+    t = doc.add_paragraph()
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = t.add_run(titulo_escrito.upper())
+    run.bold = True
+    run.font.size = Pt(14)
+    
+    doc.add_paragraph("-" * 30).alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Cuerpo del Escrito
+    for linea in contenido.split('\n'):
+        para = doc.add_paragraph()
+        if ":" in linea and len(linea) < 50: # Intenta detectar títulos como "SUMILLA:"
+            run = para.add_run(linea)
+            run.bold = True
+        else:
+            para.add_run(linea)
+            
+    # Pie de página
+    footer = doc.sections[0].footer
+    pf = footer.paragraphs[0]
+    pf.text = "Documento generado por P&JIA Core Pro - Inteligencia Jurídica"
+    pf.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -83,36 +115,35 @@ elif opcion == "Calculadora de Beneficios":
 elif opcion == "Generador de Escritos":
     st.title("📝 Generador de Escritos Legales")
     tipo_escrito = st.selectbox("Tipo de documento:", ["Contestación de Despido (Falta Grave)", "Demanda Laboral (Beneficios Sociales)", "Recurso de Apelación", "Carta Notarial"])
-    detalles = st.text_area("Describa los hechos clave:")
+    detalles = st.text_area("Describa los hechos clave para el escrito:")
     
     if st.button("Generar Borrador"):
         if detalles:
-            with st.spinner("Redactando..."):
+            with st.spinner("Redactando borrador profesional..."):
                 try:
                     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                     payload = {
                         "model": "llama-3.3-70b-versatile",
                         "messages": [
-                            {"role": "system", "content": "Eres un experto redactor jurídico peruano. Genera un borrador formal con SUMILLA, PETITORIO, FUNDAMENTOS DE HECHO Y DERECHO. Cita D.L. 728 o CP/CC según corresponda."},
-                            {"role": "user", "content": f"Genera un(a) {tipo_escrito} basado en esto: {detalles}"}
+                            {"role": "system", "content": "Eres un experto redactor jurídico peruano. Genera un borrador formal. Incluye SUMILLA, SEÑOR JUEZ, PETITORIO, FUNDAMENTOS DE HECHO Y DERECHO. Cita D.L. 728 o CP/CC según corresponda. Usa un tono formal y persuasivo."},
+                            {"role": "user", "content": f"Genera un(a) {tipo_escrito} basado en: {detalles}"}
                         ], "temperature": 0.3
                     }
                     res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload).json()
                     escrito = res["choices"][0]["message"]["content"]
                     st.session_state.escrito_actual = escrito
+                    st.session_state.tipo_actual = tipo_escrito
                     st.markdown("---")
                     st.subheader("📄 Borrador Generado")
                     st.markdown(escrito)
                 except: st.error("Error al generar.")
-        else:
-            st.error("Describa los hechos.")
+        else: st.error("Por favor, describa los hechos.")
 
     if "escrito_actual" in st.session_state:
-        # Botón para descargar a Word
-        file_word = crear_word(st.session_state.escrito_actual)
+        file_word = crear_word_profesional(st.session_state.tipo_actual, st.session_state.escrito_actual)
         st.download_button(
-            label="📥 Descargar como Word (.docx)",
+            label="📥 Descargar Escrito P&JIA (.docx)",
             data=file_word,
-            file_name=f"Escrito_PJIA_{tipo_escrito.replace(' ', '_')}.docx",
+            file_name=f"PJIA_{st.session_state.tipo_actual.replace(' ', '_')}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
