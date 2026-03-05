@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
@@ -29,17 +29,14 @@ st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide
 raw_key = st.secrets.get("GROQ_API_KEY", "")
 api_key = raw_key.replace("\n", "").replace("\r", "").replace(" ", "").replace('"', '').replace("'", "").strip()
 
-# Función para crear el archivo Word con Identidad Corporativa
+# Función para el Word Profesional
 def crear_word_profesional(titulo_escrito, contenido):
     doc = Document()
-    
-    # Encabezado P&JIA
     header = doc.sections[0].header
     p = header.paragraphs[0]
     p.text = "P&JIA - CONSULTORES LEGALES\nEspecialistas en Derecho Laboral, Civil y Penal"
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
-    # Título del Documento
     t = doc.add_paragraph()
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = t.add_run(titulo_escrito.upper())
@@ -48,21 +45,14 @@ def crear_word_profesional(titulo_escrito, contenido):
     
     doc.add_paragraph("-" * 30).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # Cuerpo del Escrito
     for linea in contenido.split('\n'):
         para = doc.add_paragraph()
-        if ":" in linea and len(linea) < 50: # Intenta detectar títulos como "SUMILLA:"
+        if any(keyword in linea.upper() for keyword in ["SUMILLA:", "PETITORIO:", "FUNDAMENTOS:", "BASE LEGAL:"]):
             run = para.add_run(linea)
             run.bold = True
         else:
             para.add_run(linea)
             
-    # Pie de página
-    footer = doc.sections[0].footer
-    pf = footer.paragraphs[0]
-    pf.text = "Documento generado por P&JIA Core Pro - Inteligencia Jurídica"
-    pf.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -78,7 +68,6 @@ with st.sidebar:
 # 4. MÓDULO: ASISTENTE JURÍDICO
 if opcion == "Asistente Jurídico":
     st.title("⚖️ Asistente Jurídico Inteligente")
-    st.info("Resúmenes analíticos: D.L. 728, Código Civil y Penal.")
     if prompt := st.chat_input("Consulta la normativa..."):
         with st.chat_message("user"): st.markdown(prompt)
         with st.chat_message("assistant"):
@@ -87,9 +76,9 @@ if opcion == "Asistente Jurídico":
                 payload = {
                     "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role": "system", "content": "Eres P&JIA Core. No copies artículos textualmente. Ofrece resúmenes analíticos de la norma peruana. Estructura: 1. Resumen, 2. Implicancia, 3. Recomendación."},
+                        {"role": "system", "content": "Eres P&JIA Core. Cita leyes reales. RECUERDA: El Acto Jurídico es el Art. 140 del Código Civil. No inventes artículos. Resúmenes analíticos: 1. Resumen, 2. Implicancia, 3. Recomendación."},
                         {"role": "user", "content": prompt}
-                    ], "temperature": 0.2
+                    ], "temperature": 0.1
                 }
                 res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload).json()
                 st.markdown(res["choices"][0]["message"]["content"])
@@ -97,7 +86,7 @@ if opcion == "Asistente Jurídico":
 
 # 5. MÓDULO: CALCULADORA DE BENEFICIOS
 elif opcion == "Calculadora de Beneficios":
-    st.title("🧮 Calculadora de Beneficios (Régimen General)")
+    st.title("🧮 Calculadora de Beneficios")
     col1, col2 = st.columns(2)
     with col1:
         sueldo = st.number_input("Sueldo Mensual (S/.)", min_value=1025.0)
@@ -114,20 +103,20 @@ elif opcion == "Calculadora de Beneficios":
 # 6. MÓDULO: GENERADOR DE ESCRITOS
 elif opcion == "Generador de Escritos":
     st.title("📝 Generador de Escritos Legales")
-    tipo_escrito = st.selectbox("Tipo de documento:", ["Contestación de Despido (Falta Grave)", "Demanda Laboral (Beneficios Sociales)", "Recurso de Apelación", "Carta Notarial"])
-    detalles = st.text_area("Describa los hechos clave para el escrito:")
+    tipo_escrito = st.selectbox("Tipo de documento:", ["Carta Notarial", "Contestación de Despido", "Demanda Laboral", "Recurso de Apelación"])
+    detalles = st.text_area("Hechos clave:")
     
     if st.button("Generar Borrador"):
         if detalles:
-            with st.spinner("Redactando borrador profesional..."):
+            with st.spinner("Redactando conforme a ley..."):
                 try:
                     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                     payload = {
                         "model": "llama-3.3-70b-versatile",
                         "messages": [
-                            {"role": "system", "content": "Eres un experto redactor jurídico peruano. Genera un borrador formal. Incluye SUMILLA, SEÑOR JUEZ, PETITORIO, FUNDAMENTOS DE HECHO Y DERECHO. Cita D.L. 728 o CP/CC según corresponda. Usa un tono formal y persuasivo."},
+                            {"role": "system", "content": "Eres un experto redactor jurídico peruano. RECUERDA: El Acto Jurídico es el Art. 140 del Código Civil. Cita D.L. 728 o Código Penal según corresponda. Usa SUMILLA, PETITORIO, HECHOS y DERECHO."},
                             {"role": "user", "content": f"Genera un(a) {tipo_escrito} basado en: {detalles}"}
-                        ], "temperature": 0.3
+                        ], "temperature": 0.2
                     }
                     res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload).json()
                     escrito = res["choices"][0]["message"]["content"]
@@ -137,13 +126,8 @@ elif opcion == "Generador de Escritos":
                     st.subheader("📄 Borrador Generado")
                     st.markdown(escrito)
                 except: st.error("Error al generar.")
-        else: st.error("Por favor, describa los hechos.")
+        else: st.error("Faltan detalles.")
 
     if "escrito_actual" in st.session_state:
         file_word = crear_word_profesional(st.session_state.tipo_actual, st.session_state.escrito_actual)
-        st.download_button(
-            label="📥 Descargar Escrito P&JIA (.docx)",
-            data=file_word,
-            file_name=f"PJIA_{st.session_state.tipo_actual.replace(' ', '_')}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+        st.download_button("📥 Descargar Escrito P&JIA (.docx)", file_word, f"PJIA_{st.session_state.tipo_actual}.docx")
