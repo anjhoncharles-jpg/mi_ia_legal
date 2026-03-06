@@ -1,8 +1,10 @@
 streamlit
 requests
-python-docx
 PyPDF2
+python-docx
 pandas
-sqlalchemy
+python-pptx
 pytesseract
 pdf2image
+Pillow
+openpyxl
