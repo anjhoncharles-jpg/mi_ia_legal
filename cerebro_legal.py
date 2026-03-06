@@ -7,7 +7,7 @@ from datetime import datetime
 import sqlite3
 import pandas as pd
 
-# 1. ACCESO Y CONFIGURACIÓN
+# 1. SISTEMA DE ACCESO
 USUARIOS = {"admin": "clave777", "user1": "peru2026", "user2": "legal20", "user3": "pjia01", "user4": "estudio5"}
 if "auth" not in st.session_state: st.session_state.auth = False
 
@@ -21,12 +21,13 @@ if not st.session_state.auth:
             st.session_state.auth = True
             st.session_state.user_actual = u
             st.rerun()
+        else: st.error("Credenciales incorrectas")
     st.stop()
 
+# 2. CONFIGURACIÓN Y BASE DE DATOS
 st.set_page_config(page_title="P&JIA Core Pro", page_icon="⚖️", layout="wide")
 api_key = st.secrets.get("GROQ_API_KEY", "").strip().replace('"', '').replace("'", "")
 
-# 2. BASE DE DATOS E INTELIGENCIA
 def init_db():
     conn = sqlite3.connect('pjia_legal.db')
     c = conn.cursor()
@@ -38,61 +39,93 @@ def init_db():
 
 init_db()
 
-# 3. MENÚ LATERAL
+# 3. LECTURA DE PDF ROBUSTA
+def extraer_texto_seguro(archivo):
+    try:
+        lector = PyPDF2.PdfReader(archivo)
+        texto = ""
+        # Leemos hasta 50 páginas para capturar la imputación fiscal completa
+        for i in range(len(lector.pages[:50])):
+            texto += lector.pages[i].extract_text() + "\n"
+        
+        if len(texto.strip()) < 100:
+            return "ALERTA_ESCANEADO"
+        return texto
+    except Exception as e:
+        return f"ERROR_LECTURA: {e}"
+
+# 4. MENÚ LATERAL
 with st.sidebar:
     st.title("⚖️ P&JIA Panel")
-    opcion = st.radio("Módulos:", ["Analista de Carpeta Fiscal", "Búsqueda Global", "Gestor de Archivo", "Calculadora y Escritos"])
+    opcion = st.radio("Módulos:", ["Analista de Carpeta Fiscal", "Búsqueda Global", "Gestor de Archivo"])
     st.markdown("---")
-    st.info("Especialidad: Control de Tipicidad y Análisis de Subsunción.")
+    st.info(f"Usuario: {st.session_state.user_actual}")
 
-# 4. MÓDULO: ANALISTA DE CARPETA FISCAL (CONTROL DE TIPICIDAD)
+# 5. MÓDULO: ANALISTA DE CARPETA FISCAL (CONTROL DE TIPICIDAD)
 if opcion == "Analista de Carpeta Fiscal":
-    st.title("🔍 Control de Tipicidad y Subsunción Fiscal")
-    st.warning("Sube la Carpeta Fiscal para verificar si los delitos han sido correctamente tipificados.")
+    st.title("🔍 Control de Tipicidad - Carpeta Fiscal")
+    st.markdown("Sube la disposición fiscal para verificar si la subsunción de los delitos es correcta.")
     
+    num_exp = st.text_input("Número de Carpeta Fiscal / Caso")
     archivo = st.file_uploader("Cargar Carpeta Fiscal (PDF)", type=["pdf"])
     
     if archivo:
-        if st.button("Analizar Tipicidad"):
-            with st.spinner("Evaluando elementos del tipo penal..."):
-                texto = "\n".join([p.extract_text() for p in PyPDF2.PdfReader(archivo).pages])
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        if st.button("🚀 Iniciar Análisis de Tipicidad"):
+            with st.spinner("Analizando hechos y normas penales..."):
+                texto_extraido = extraer_texto_seguro(archivo)
                 
-                # PROMPT ESPECÍFICO PARA CONTROL FISCAL
-                sys_prompt = """Eres un experto en Derecho Penal y Procesal Penal peruano (NCPP). 
-                Tu tarea es realizar un CONTROL DE TIPICIDAD. 
-                1. Analiza los hechos descritos en el PDF.
-                2. Contrasta los hechos con los delitos tipificados por la Fiscalía.
-                3. Determina si falta algún elemento del tipo (Sujeto, Objeto, Conducta, Dolo/Culpa).
-                4. Cita artículos específicos del Código Penal.
-                Si encuentras que un hecho NO se subsume en el delito, indícalo como ATIPICIDAD."""
+                if texto_extraido == "ALERTA_ESCANEADO":
+                    st.error("⚠️ El PDF parece ser una imagen/escaneado. El sistema no puede extraer texto de fotos aún. Intenta con un PDF digital.")
+                else:
+                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                    
+                    sys_prompt = """Eres un experto en Derecho Penal peruano. Tu misión es el CONTROL DE LEGALIDAD.
+                    1. Analiza los HECHOS narrados por la Fiscalía.
+                    2. Contrasta si esos hechos cumplen con todos los elementos del TIPO PENAL imputado (Sujeto, conducta, dolo, etc.).
+                    3. Si hay falta de elementos de convicción o error en la tipificación, indica 'ERROR DE SUBSUNCIÓN' o 'ATIPICIDAD'.
+                    4. Cita siempre el Código Penal y el NCPP.
+                    5. Sé crítico. Si la Fiscal ha tipificado mal, explica por qué."""
 
-                payload = {
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": f"CARPETA FISCAL:\n{texto[:25000]}"}
-                    ], "temperature": 0.1
-                }
-                res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload).json()
-                st.session_state.analisis_fiscal = res["choices"][0]["message"]["content"]
-                st.markdown(st.session_state.analisis_fiscal)
+                    payload = {
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": f"TEXTO DE LA CARPETA:\n{texto_extraido[:30000]}\n\nRealiza un análisis detallado de la tipificación."}
+                        ], "temperature": 0.1
+                    }
+                    
+                    try:
+                        res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload).json()
+                        analisis = res["choices"][0]["message"]["content"]
+                        st.session_state.ultimo_analisis = analisis
+                        st.success("Análisis Completo")
+                        st.markdown(analisis)
+                        
+                        # Guardar automáticamente en la DB
+                        conn = sqlite3.connect('pjia_legal.db')
+                        c = conn.cursor()
+                        c.execute("INSERT INTO expedientes (numero_exp, materia, contenido, resumen, fecha_registro, usuario) VALUES (?,?,?,?,?,?)",
+                                  (num_exp, "Penal", texto_extraido, analisis, datetime.now().strftime("%d/%m/%Y"), st.session_state.user_actual))
+                        conn.commit()
+                        conn.close()
+                    except:
+                        st.error("Error al conectar con el motor de IA.")
 
-# 5. MÓDULO: BÚSQUEDA GLOBAL
+# 6. MÓDULO: BÚSQUEDA GLOBAL
 elif opcion == "Búsqueda Global":
-    st.title("🔎 Buscador Maestro P&JIA")
-    query = st.text_input("Ingresa nombre, DNI o palabra clave a buscar en toda tu base de datos:")
-    
+    st.title("🔎 Buscador P&JIA")
+    query = st.text_input("Buscar en todos los expedientes guardados (Nombres, DNI, Delitos):")
     if query:
         conn = sqlite3.connect('pjia_legal.db')
-        # Buscamos en el contenido de todos los PDFs guardados
         df = pd.read_sql_query(f"SELECT numero_exp, materia, fecha_registro FROM expedientes WHERE contenido LIKE '%{query}%' OR resumen LIKE '%{query}%'", conn)
         conn.close()
-        
-        if not df.empty:
-            st.success(f"Se encontraron {len(df)} coincidencias:")
-            st.table(df)
-        else:
-            st.error("No se encontraron registros con esa información.")
+        if not df.empty: st.table(df)
+        else: st.warning("No se encontraron coincidencias.")
 
-# (Los demás módulos de Gestión y Calculadora se mantienen simplificados para el flujo)
+# 7. MÓDULO: GESTOR DE ARCHIVO
+elif opcion == "Gestor de Archivo":
+    st.title("🗃️ Archivo Digital")
+    conn = sqlite3.connect('pjia_legal.db')
+    df = pd.read_sql_query("SELECT id, numero_exp, materia, fecha_registro FROM expedientes", conn)
+    conn.close()
+    st.dataframe(df, use_container_width=True)
