@@ -2,3 +2,5 @@ streamlit
 requests
 python-docx
 PyPDF2
+pandas
+sqlalchemy
